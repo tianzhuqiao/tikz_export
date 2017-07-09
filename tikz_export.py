@@ -1,20 +1,42 @@
 """
-automically generate the eps file from the tikz diagram
+Automically generate the pdf/eps/svg files from the tikz diagram
+
+basic usage:
+    >>> # to generate the pdf files from all the tikzpicture
+    >>> tikz_export.py -i basic.tex -f pdf
+    >>> # to generate the eps files from all the tikzpicture
+    >>> tikz_export.py -i basic.tex -f eps
+    >>> # to change the output filename, the output filename will be
+    >>> # myfile0.eps myfile1.eps, ...
+    >>> tikz_export.py -i basic.tex -f eps -o myfile
+    >>> # only keep the 5th image
+    >>> tikz_export.py -i basic.tex -f eps -n 5
+
+Note: you can also define the filename for each tizkpicture by adding the
+following line (start with '$$$ ') before the tikzpicture. For example,
+
+%%% mypicture
+\begin{tikzpicture}
+..
+\end{tikzpicture}
+Then the exported file will have name "mypicture.pdf/svg/eps"
 """
-import sys, getopt, os
+
+import sys, getopt, os, traceback
 import glob
-tex2pdf_external = ('\\usetikzlibrary{external}\n'
+tex2pdf_external = (
+    '\\usetikzlibrary{external}\n'
     '\\tikzset{external/system call={pdflatex \\tikzexternalcheckshellescape'
     '-halt-on-error -interaction=batchmode -jobname "\\image" "\\texsource"'
     '}}\n'
     '\\tikzexternalize[shell escape=-enable-write18]\n\n')
 
-pdf2 = {}
-pdf2['.eps'] = "pdftops -eps"
-pdf2['.svg'] = "pdf2svg"
+pdf_export_cmd = {}
+pdf_export_cmd['.eps'] = "pdftops -eps"
+pdf_export_cmd['.svg'] = "pdf2svg"
 
 tikz_export_tip = """
-%s -i <tex file> -o <eps file> -f [pdf|eps|svg] -d <destination folder> [-f N]
+tikz_export.py -i <tex file> -o <eps file> -f [pdf|eps|svg] -d <destination folder> [-n N]
    -i: input tex file
    -o: default output file prefix
    -d: the destination folder
@@ -22,14 +44,14 @@ tikz_export_tip = """
    -n N: keep the Nth figure only"""
 
 def tizk_export(argv):
-    tip = tikz_export_tip%argv[0]
+    tip = tikz_export_tip
     inputfile = ''
     outputfile = ''
     fmt = ".pdf"
     dest = '.'
     fig = []
     try:
-        opts, args = getopt.getopt(argv[1:], "hi:o:f:n:d:")
+        opts, _ = getopt.getopt(argv[1:], "hi:o:f:n:d:")
     except getopt.GetoptError:
         traceback.print_exc()
         print(tip)
@@ -44,7 +66,7 @@ def tizk_export(argv):
             outputfile = arg
         elif opt == '-f':
             f = '.'+arg.strip()
-            if pdf2.get(f, None) is None:
+            if pdf_export_cmd.get(f, None) is None:
                 print("unknown argument -f %s"%f)
                 print(tip)
                 sys.exit(2)
@@ -104,7 +126,7 @@ def tizk_export(argv):
                 fn, fe = "%s%d"%(outputfile, idx), fmt
             fout = dest+'\\'+fn+fe
             if fe != ".pdf":
-                os.system(r"%s %s %s"%(pdf2[fe], f, fout))
+                os.system(r"%s %s %s"%(pdf_export_cmd[fe], f, fout))
             else:
                 os.system("del %s"%(fout))
                 os.rename(f, fout)
@@ -112,6 +134,5 @@ def tizk_export(argv):
         os.system("del temp*.*")
 
 if __name__ == "__main__":
-    tex2eps(sys.argv)
-
+    tizk_export(sys.argv)
 
