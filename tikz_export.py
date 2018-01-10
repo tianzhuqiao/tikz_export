@@ -3,17 +3,18 @@ Automically generate the pdf/eps/svg files from the tikz diagram
 
 basic usage:
     >>> # to generate the pdf files from all the tikzpicture
-    >>> tikz_export.py -i basic.tex -f pdf
+    >>> tikz_export.py basic.tex -f pdf
     >>> # to generate the eps files from all the tikzpicture
-    >>> tikz_export.py -i basic.tex -f eps
+    >>> tikz_export.py basic.tex -f eps
     >>> # to change the output filename, the output filename will be
     >>> # myfile0.eps myfile1.eps, ...
-    >>> tikz_export.py -i basic.tex -f eps -o myfile
+    >>> tikz_export.py basic.tex -f eps -o myfile
     >>> # only keep the 5th image
-    >>> tikz_export.py -i basic.tex -f eps -n 5
-
+    >>> tikz_export.py basic.tex -f eps -n 5
+    >>> # only keep the image with filename *my*
+    >>> tikz_export.py basic.tex -f eps -figs *my*
 Note: you can also define the filename for each tizkpicture by adding the
-following line (start with '$$$ ') before the tikzpicture. For example,
+following line (start with '%%% ') before the tikzpicture. For example,
 
 %%% mypicture
 \begin{tikzpicture}
@@ -22,8 +23,10 @@ following line (start with '$$$ ') before the tikzpicture. For example,
 Then the exported file will have name "mypicture.pdf/svg/eps"
 """
 
-import sys, getopt, os, traceback
+import sys, os, traceback, fnmatch, re
 import glob
+import click
+
 tex2pdf_external = (
     '\\usetikzlibrary{external}\n'
     '\\tikzset{external/system call={pdflatex \\tikzexternalcheckshellescape'
@@ -35,84 +38,67 @@ pdf_export_cmd = {}
 pdf_export_cmd['.eps'] = "pdftops -eps"
 pdf_export_cmd['.svg'] = "pdf2svg"
 
-tikz_export_tip = """
-tikz_export.py -i <tex file> -o <eps file> -f [pdf|eps|svg] -d <destination folder> [-n N]
-   -i: input tex file
-   -o: default output file prefix
-   -d: the destination folder
-   -f [pdf|svg|eps]: default file format
-   -n N: keep the Nth figure only"""
-
-def tizk_export(argv):
-    tip = tikz_export_tip
-    inputfile = ''
-    outputfile = ''
-    fmt = ".pdf"
-    dest = '.'
-    fig = []
-    try:
-        opts, _ = getopt.getopt(argv[1:], "hi:o:f:n:d:")
-    except getopt.GetoptError:
-        traceback.print_exc()
-        print(tip)
-        sys.exit(2)
-    for opt, arg in opts:
-        if opt == '-h':
-            print(tip)
-            return
-        elif opt in ("-i"):
-            inputfile = arg
-        elif opt in ("-o"):
-            outputfile = arg
-        elif opt == '-f':
-            f = '.'+arg.strip()
-            if pdf_export_cmd.get(f, None) is None:
-                print("unknown argument -f %s"%f)
-                print(tip)
-                sys.exit(2)
-            fmt = f
-        elif opt == '-n':
-            fig.append(int(arg))
-        elif opt == '-d':
-            dest = arg.strip()
-
-    if not os.path.isfile(inputfile):
-        print(tip)
-        return
+@click.command()
+@click.argument('filename', type=click.Path(exists=True))
+@click.option('--output-prefix', '-o', help="output file prefix")
+@click.option('--dest', '-d', default='.', help="destination folder")
+@click.option('--fmt', '-f', default='pdf',
+              type=click.Choice(['pdf', 'svg', 'eps']),
+              help="output file format")
+@click.option('--number', '-n', multiple=True, help="output the nth figure")
+@click.option('--fig', multiple=True, help="the name of figure to be output")
+def cli(filename, output_prefix, dest, fmt, number, fig):
+    inputfile = filename
+    if not fmt.startswith('.'):
+        fmt = '.'+fmt
+    figs = number
+    def is_enable(fidx, fname):
+        """check whether need to output the figure"""
+        enable = (not figs) or (fidx in figs)
+        if enable:
+            if not fig:
+                return True
+            for f in fig:
+                if fnmatch.fnmatch(fname, f):
+                    return True
+        return False
 
     with open(inputfile) as fin:
         content = fin.readlines()
         ftemp = open('temp.tex', 'w')
-        outputEnable = True
+        output_en = True
         fig_idx = 0
         fnames = []
         fname = ''
         for c in content:
-            if "\\begin{document}" in c:
+            if re.search(r'\\begin(\s)*{(\s)*document(\s)*}', c):
                 ftemp.write((tex2pdf_external))
                 ftemp.write("%s"%c)
-                outputEnable = False
-            elif "\\begin{tikzpicture" in c:
-                outputEnable = (not fig) or (fig_idx in fig)
+                output_en = False
+            elif re.search(r'\\begin(\s)*{(\s)*tikzpicture', c):
+                output_en = is_enable(fig_idx, fname)
                 fig_idx += 1
-                if outputEnable:
+                if output_en:
                     fnames.append(fname)
                 fname = ''
-            elif "\\end{document}" in c:
+            elif re.search(r'\\end(\s)*{(\s)*document}', c):
                 ftemp.write("%s"%c)
                 break
+            elif re.search(r'\\end(\s)*{(\s)*tikzpicture(\s)*}', c):
+                if output_en:
+                    ftemp.write("%s"%c)
+                output_en = False
             elif c.startswith("%%% "):
                 fname = c[4:].strip()
-            if outputEnable:
+            if output_en:
                 ftemp.write("%s"%c)
-            if "\\end{tikzpicture}" in c:
-                outputEnable = False
         ftemp.close()
+
         # get the default output filename
         base = os.path.basename(inputfile)
         base = os.path.splitext(base)[0]
-        if not outputfile:
-            outputfile = base+'-figure'
+        if not output_prefix:
+            output_prefix = base+'-figure'
 
         os.system(r"pdflatex --shell-escape temp.tex")
         for f in glob.glob('temp-figure*.pdf'):
@@ -123,8 +109,9 @@ def tizk_export(argv):
                 if not fe:
                     fe = fmt
             else:
-                fn, fe = "%s%d"%(outputfile, idx), fmt
-            fout = dest+'\\'+fn+fe
+                fn, fe = "%s%d"%(output_prefix, idx), fmt
+            fout = os.path.join(dest, fn+fe)
+            print("generating: %s"%fout)
             if fe != ".pdf":
                 os.system(r"%s %s %s"%(pdf_export_cmd[fe], f, fout))
             else:
@@ -134,5 +121,4 @@ def tizk_export(argv):
         os.system("del temp*.*")
 
 if __name__ == "__main__":
-    tizk_export(sys.argv)
-
+    cli()
