@@ -12,7 +12,7 @@ basic usage:
     >>> # only keep the 5th image
     >>> tikz_export.py basic.tex -f eps -n 5
     >>> # only keep the image with filename *my*
-    >>> tikz_export.py basic.tex -f eps -figs *my*
+    >>> tikz_export.py basic.tex -f eps --fig *my*
 Note: you can also define the filename for each tizkpicture by adding the
 following line (start with '%%% ') before the tikzpicture. For example,
 
@@ -34,9 +34,7 @@ tex2pdf_external = (
     '}}\n'
     '\\tikzexternalize[shell escape=-enable-write18]\n\n')
 
-pdf_export_cmd = {}
-pdf_export_cmd['.eps'] = "pdftops -eps"
-pdf_export_cmd['.svg'] = "pdf2svg"
+pdf_export_cmd = {'.eps': "pdftops -eps", '.svg': "pdf2svg"}
 
 @click.command()
 @click.argument('filename', type=click.Path(exists=True))
@@ -111,7 +109,7 @@ def cli(filename, output_prefix, dest, fmt, number, fig):
             else:
                 fn, fe = "%s%d"%(output_prefix, idx), fmt
             fout = os.path.join(dest, fn+fe)
-            print("generating: %s"%fout)
+            click.echo("generating: %s"%fout)
             if fe != ".pdf":
                 os.system(r"%s %s %s"%(pdf_export_cmd[fe], f, fout))
             else:
