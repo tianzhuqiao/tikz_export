@@ -43,7 +43,7 @@ pdf_export_cmd = {'.eps': "pdftops -eps", '.svg': "pdf2svg"}
 @click.option('--fmt', '-f', default='pdf',
               type=click.Choice(['pdf', 'svg', 'eps']),
               help="output file format")
-@click.option('--number', '-n', multiple=True, help="output the nth figure")
+@click.option('--number', '-n', multiple=True, type=click.INT, help="output the nth figure")
 @click.option('--fig', multiple=True, help="the name of figure to be output")
 def cli(filename, output_prefix, dest, fmt, number, fig):
     inputfile = filename
@@ -69,20 +69,20 @@ def cli(filename, output_prefix, dest, fmt, number, fig):
         fnames = []
         fname = ''
         for c in content:
-            if re.search(r'\\begin(\s)*{(\s)*document(\s)*}', c):
+            if re.search(r'^\s*\\begin(\s)*{(\s)*document(\s)*}', c):
                 ftemp.write((tex2pdf_external))
                 ftemp.write("%s"%c)
                 output_en = False
-            elif re.search(r'\\begin(\s)*{(\s)*tikzpicture', c):
+            elif re.search(r'^\s*\\begin(\s)*{(\s)*tikzpicture', c):
                 output_en = is_enable(fig_idx, fname)
                 fig_idx += 1
                 if output_en:
                     fnames.append(fname)
                 fname = ''
-            elif re.search(r'\\end(\s)*{(\s)*document}', c):
+            elif re.search(r'^\s*\\end(\s)*{(\s)*document}', c):
                 ftemp.write("%s"%c)
                 break
-            elif re.search(r'\\end(\s)*{(\s)*tikzpicture(\s)*}', c):
+            elif re.search(r'^\s*\\end(\s)*{(\s)*tikzpicture(\s)*}', c):
                 if output_en:
                     ftemp.write("%s"%c)
                 output_en = False
