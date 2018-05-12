@@ -23,25 +23,54 @@ following line (start with '%%% ') before the tikzpicture. For example,
 Then the exported file will have name "mypicture.pdf/svg/eps"
 """
 
-import sys, os, traceback, fnmatch, re
+import sys
+import os
+import traceback
+import fnmatch
+import re
 import glob
 import click
 
-tex2pdf_external = (
-    '\\usetikzlibrary{external}\n'
-    '\\tikzset{external/system call={pdflatex \\tikzexternalcheckshellescape'
-    '-halt-on-error -interaction=batchmode -jobname "\\image" "\\texsource"'
-    '}}\n'
-    '\\tikzexternalize[shell escape=-enable-write18]\n\n')
-
-pdf_export_cmd = {'.eps': "pdftops -eps", '.svg': "pdf2svg"}
+platform = sys.platform
+if platform == 'win32':
+    tex2pdf_external = (
+        '\\usetikzlibrary{external}\n'
+        '\\tikzset{external/system call={pdflatex \\tikzexternalcheckshellescape'
+        '-halt-on-error -interaction=batchmode -jobname "\\image" "\\texsource"'
+        '}}\n'
+        '\\tikzexternalize[shell escape=-enable-write18]\n\n')
+    pdf_export_cmd = {'.eps': "pdftops -eps {src} {dst}",
+                      '.svg': "pdf2svg {src} {dst}"}
+    latex_compile = "pdflatex --shell-escape {filename}"
+elif platform == 'darwin':
+    tex2pdf_external = (
+        '\\usetikzlibrary{external}'
+        '\\tikzset{external/system call={xelatex \\tikzexternalcheckshellescape -halt-on-error'
+        '-interaction=batchmode -jobname "\\image" "\\texsource";'
+        '}}\n'
+        '\\tikzexternalize'
+        )
+    pdf_export_cmd = {'.eps': "pdf2ps -eps {src} {dst}", '.svg': "pdf2svg {src} {dst}",
+                      '.png': "sips -s format png {src} --out {dst}"}
+    latex_compile = "xelatex --shell-escape {filename}"
+elif platform == 'linux2':
+    tex2pdf_external = (
+        '\\usetikzlibrary{external}'
+        '\\tikzset{external/system call={xelatex \\tikzexternalcheckshellescape -halt-on-error'
+        '-interaction=batchmode -jobname "\\image" "\\texsource";'
+        '}}\n'
+        '\\tikzexternalize'
+        )
+    pdf_export_cmd = {'.eps': "pdf2ps -eps {src} {dst}", '.svg': "pdf2svg {src} {dst}",
+                      '.png': "pdftoppm -png {src} > {dst}"}
+    latex_compile = "xelatex --shell-escape {filename}"
 
 @click.command()
 @click.argument('filename', type=click.Path(exists=True))
 @click.option('--output-prefix', '-o', help="output file prefix")
 @click.option('--dest', '-d', default='.', help="destination folder")
 @click.option('--fmt', '-f', default='pdf',
-              type=click.Choice(['pdf', 'svg', 'eps']),
+              type=click.Choice(['pdf']+[f[1:] for f in pdf_export_cmd.keys()]),
               help="output file format")
 @click.option('--number', '-n', multiple=True, type=click.INT, help="output the nth figure")
 @click.option('--fig', multiple=True, help="the name of figure to be output")
@@ -98,7 +127,7 @@ def cli(filename, output_prefix, dest, fmt, number, fig):
         if not output_prefix:
             output_prefix = base+'-figure'
 
-        os.system(r"pdflatex --shell-escape temp.tex")
+        os.system(latex_compile.format(filename="temp.tex"))
         for f in glob.glob('temp-figure*.pdf'):
             idx = int(f[11:-4])
             fout = ''
@@ -111,12 +140,13 @@ def cli(filename, output_prefix, dest, fmt, number, fig):
             fout = os.path.join(dest, fn+fe)
             click.echo("generating: %s"%fout)
             if fe != ".pdf":
-                os.system(r"%s %s %s"%(pdf_export_cmd[fe], f, fout))
+                os.system(pdf_export_cmd[fe].format(src=f, dst=fout))
             else:
-                os.system("del %s"%(fout))
+                os.system("rm %s"%(fout))
                 os.rename(f, fout)
 
-        os.system("del temp*.*")
+        os.system("rm temp*.*")
 
 if __name__ == "__main__":
     cli()
+
