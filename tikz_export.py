@@ -53,7 +53,7 @@ elif platform == 'darwin':
     pdf_export_cmd = {'.eps': "pdf2ps -eps {src} {dst}", '.svg': "pdf2svg {src} {dst}",
                       '.png': "sips -s format png {src} --out {dst}"}
     latex_compile = "xelatex --shell-escape {filename}"
-elif platform == 'linux2':
+elif platform.startswith('linux'):
     tex2pdf_external = (
         '\\usetikzlibrary{external}'
         '\\tikzset{external/system call={xelatex \\tikzexternalcheckshellescape -halt-on-error'
