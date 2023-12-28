@@ -1,6 +1,6 @@
 from distutils.core import setup
 
-setup(name='tizk_export',
+setup(name='tikz_export',
         version='0.0.3',
         description='Generate pdf/svg/eps file from tikzpicture',
         author='Tianzhu Qiao',

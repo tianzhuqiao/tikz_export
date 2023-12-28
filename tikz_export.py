@@ -117,6 +117,7 @@ def cli(filename, output_prefix, dest, fmt, number, fig):
                 output_en = False
             elif c.startswith("%%% "):
                 fname = c[4:].strip()
+                output_en = is_enable(fig_idx, fname)
             if output_en:
                 ftemp.write("%s"%c)
         ftemp.close()
